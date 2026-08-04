@@ -37,6 +37,12 @@ Citations and structured output cannot be requested in the same API call, so ans
 split: a grounded turn produces prose plus citations, a second turn converts that into the
 typed record. That split is also where the arithmetic check fits.
 
+## Worked example
+
+`examples/` holds three documents describing one loan — a base agreement and two
+amendments, one of them superseded — plus four questions that a pipeline without
+version resolution gets wrong in a predictable way. See [examples/README.md](examples/README.md).
+
 ## Setup
 
 ```bash
