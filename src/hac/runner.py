@@ -69,6 +69,13 @@ async def run(
 
     async def one(qid: str, question: str) -> None:
         t0 = time.monotonic()
+        if cfg.budget_usd and llm.usage.cost_usd(cfg.cache_ttl) >= cfg.budget_usd:
+            res = QuestionResult(qid=qid, question=question,
+                                 error=f"skipped: budget ceiling ${cfg.budget_usd} reached")
+            async with write_lock:
+                results[qid] = res
+                append_result(cfg.answers_file, res)
+            return
         try:
             async with sem:
                 res = await asyncio.wait_for(

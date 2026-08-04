@@ -32,6 +32,11 @@ class Config:
     # Refusal fallback (Opus 5). Degrades to the plain endpoint on any 400.
     server_side_fallback: bool = True
 
+    # Hard spend ceiling in USD for one run. 0 disables the check. When the
+    # estimated spend crosses it, questions still in the queue are skipped and
+    # the partial submission on disk stays valid.
+    budget_usd: float = 0.0
+
     # Paths
     docs_dir: str = "data/private/docs"
     questions_file: str = "data/private/questions.json"
