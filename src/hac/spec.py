@@ -165,11 +165,35 @@ def evaluate_spec(spec: dict, ctx: Context) -> Result:
     if threshold is None:
         return Result(abs(value), None, ids, note="no threshold")
 
+    # The clause states its limit to the same two decimals the submission asks
+    # for, so the comparison is made at that precision. A ratio of 0.0442
+    # against a 0.04x cap is reported as 0.04 and is not a breach.
+    reported = abs(value)
+    signed = -reported if value < 0 else reported
     if direction == "max":
-        status = "BREACH" if value > threshold else "COMPLIANT"
+        status = "BREACH" if signed > threshold else "COMPLIANT"
     else:
-        status = "BREACH" if value < threshold else "COMPLIANT"
+        status = "BREACH" if signed < threshold else "COMPLIANT"
     return Result(abs(value), status, ids)
+
+
+def decisive_txn(spec: dict, ctx: Context, result: Result) -> str | None:
+    """The one transaction whose removal changes the verdict.
+
+    The case defines evidence exactly that way: a line that merely contributes
+    to a total is not evidence. So each contributing transaction is dropped in
+    turn, and only an unambiguous single flip counts.
+    """
+    if result.status is None or not result.contributors:
+        return None
+    flips: list[str] = []
+    for txn_id in dict.fromkeys(result.contributors):
+        patched = dict(ctx.overrides)
+        patched[txn_id] = {**patched.get(txn_id, {}), "amount": None}
+        probe = evaluate_spec(spec, Context(ctx.txns, ctx.profile, patched))
+        if probe.status and probe.status != result.status:
+            flips.append(txn_id)
+    return flips[0] if len(flips) == 1 else None
 
 
 def load_specs(path: str | Path) -> dict[str, dict[str, dict]]:

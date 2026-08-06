@@ -111,3 +111,35 @@ def test_kyc_reads_threshold_and_excludes_holdings_below_it():
     assert prof.threshold == 20.0
     assert len(prof.owners) == 3
     assert [o.name for o in prof.related] == ["Aktau Holdings LLP"]
+
+
+def test_audit_reclassification_moves_a_line_and_marks_it():
+    from hac import audit
+    from hac.bank import Txn
+    txns = [
+        Txn("TXN-X-1", "2025-03-01", "ACC-1", "Irtysh Advisory Bureau",
+            "Advisory retainer", -592296.10, "USD"),
+        Txn("TXN-X-2", "2025-04-01", "ACC-1", "Other LLP", "Office rent", -1000.0, "USD"),
+    ]
+    adj = audit.build(
+        {"reclass": [{"amount": 592296.10, "counterparty": "Irtysh Advisory Bureau",
+                      "to": "interest"}]}, txns)
+    assert adj.overrides["TXN-X-1"]["category"] == "interest"
+    assert adj.touched == ["TXN-X-1"]
+
+
+def test_addbacks_respect_the_materiality_floor():
+    from hac.audit import Adjustments
+    adj = Adjustments(addbacks={"materiality": 300000.0,
+                                "items": [251338.94, 342905.28, 481247.63]})
+    assert adj.add_back_total() == pytest.approx(824152.91)
+
+
+def test_scorer_matches_the_published_formula():
+    from hac.score import score_cell
+    key = {"status": "BREACH", "actual": 100.0, "evidence_txn_id": None}
+    assert score_cell({"status": "COMPLIANT", "actual": 100.0}, key, "S", "6.1").score == 0.0
+    assert score_cell({"status": "BREACH", "actual": 100.0}, key, "S", "6.1").score == 1.0
+    half = score_cell({"status": "BREACH", "actual": 102.5}, key, "S", "6.1").score
+    assert half == pytest.approx(0.5 + 0.30 * 0.5 + 0.20 * 0.5)
+    assert score_cell({"status": "BREACH", "actual": 105.0}, key, "S", "6.1").score == 0.5
