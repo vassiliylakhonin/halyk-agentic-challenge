@@ -105,6 +105,13 @@ def cmd_solve(cfg: Config, args) -> int:
         text_cache=args.text_cache,
     )
     print(json.dumps(report.summary(), ensure_ascii=False, indent=2))
+    Path(cfg.out_dir).mkdir(parents=True, exist_ok=True)
+    Path(cfg.out_dir, "adjustments_seen.json").write_text(
+        json.dumps(report.adjustments, ensure_ascii=False, indent=2), encoding="utf-8")
+    Path(cfg.out_dir, "specs_seen.json").write_text(json.dumps(
+        {f"{t.scenario}.{t.covenant}": {"source": t.source, "note": t.note,
+                                        "spec": t.spec}
+         for t in report.traces}, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0
 
 

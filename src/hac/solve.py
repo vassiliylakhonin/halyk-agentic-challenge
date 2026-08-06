@@ -48,6 +48,7 @@ class Trace:
 @dataclass
 class Report:
     traces: list[Trace] = field(default_factory=list)
+    adjustments: dict = field(default_factory=dict)
     ocr_pages: int = 0
     failures: list[str] = field(default_factory=list)
     seconds: float = 0.0
@@ -195,6 +196,7 @@ def solve(
                         f"{scenario} supplement agreed by {share:.0%} of readings")
 
         adj = audit.build(block, txns)
+        report.adjustments[scenario] = block
         ctx = Context(txns=txns, profile=kyc_profile(docs, scenario),
                       overrides=adj.overrides)
 

@@ -179,7 +179,7 @@ def evaluate_spec(spec: dict, ctx: Context) -> Result:
     # The clause states its limit to the same two decimals the submission asks
     # for, so the comparison is made at that precision. A ratio of 0.0442
     # against a 0.04x cap is reported as 0.04 and is not a breach.
-    reported = abs(value)
+    reported = round(abs(value), 2)
     signed = -reported if value < 0 else reported
     if direction == "max":
         status = "BREACH" if signed > threshold else "COMPLIANT"

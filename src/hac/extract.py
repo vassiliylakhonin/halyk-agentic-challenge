@@ -118,10 +118,20 @@ ADJ_SCHEMA = {
     "additionalProperties": False,
 }
 
-ADJ_SYSTEM = """You read an auditor's covenant-compliance supplement and list the \
-adjustments that must be applied to a transaction ledger before covenants are tested.
+ADJ_SYSTEM = """You read a borrower's file and list the adjustments that must be applied \
+to a transaction ledger before covenants are tested.
 
-Apply only what the auditor concluded. The supplements contain deliberate distractors:
+The auditor's covenant supplement is one source. Treasury records and compliance files \
+are others, and a covenant often points at them by name. Judge a statement by what it \
+is, not by who signed it:
+
+- A missing or wrong amount in the ledger export is a defect in the data. Apply the \
+corrected amount whoever reports it - treasury, the auditor, or the borrower's own \
+records. It needs no auditor conclusion, because it is not an opinion.
+- A change of accounting line is a judgement, and there the auditor's final conclusion \
+governs.
+
+The file contains deliberate distractors:
 
 - An adjustment the auditor considered and then rejected must NOT be applied. Wording \
 such as "первоначальная классификация сохраняется" or "корректировка не производилась" \
