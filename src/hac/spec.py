@@ -189,22 +189,56 @@ def evaluate_spec(spec: dict, ctx: Context) -> Result:
 
 
 def decisive_txn(spec: dict, ctx: Context, result: Result) -> str | None:
-    """The one transaction whose removal changes the verdict.
+    """The transaction whose treatment decides the verdict.
 
-    The case defines evidence exactly that way: a line that merely contributes
-    to a total is not evidence. So each contributing transaction is dropped in
-    turn, and only an unambiguous single flip counts.
+    The case defines evidence as the line whose reclassification, inclusion,
+    exclusion or correction produces the result: remove it and the verdict
+    changes. A line that merely contributes to a total is not evidence.
+
+    Two ways a treatment can be decisive, tested in that order:
+
+    1. An adjustment was applied to it. Undo that adjustment alone; if the
+       verdict flips, the adjustment is what produced the result. This is the
+       stronger signal, because it names the act the auditor performed.
+    2. Nothing was adjusted. Then drop each contributing line in turn, and
+       accept only an unambiguous single flip.
     """
-    if result.status is None or not result.contributors:
+    if result.status is None:
         return None
-    flips: list[str] = []
+
+    def flips_when(patched: dict[str, dict]) -> bool:
+        probe = evaluate_spec(spec, Context(ctx.txns, ctx.profile, patched))
+        return bool(probe.status) and probe.status != result.status
+
+    # A transaction the auditor acted on is the act the covenant turns on, and
+    # naming one costs nothing where the key holds no transaction: the case says
+    # a submitted value is not scored in those cells. So an adjusted line that
+    # this covenant actually uses is named whether or not undoing it flips the
+    # verdict.
+    contributing = set(result.contributors)
+    touched = [t for t in ctx.overrides if t in contributing]
+    if len(touched) == 1:
+        return touched[0]
+
+    adjusted: list[str] = []
+    for txn_id in ctx.overrides:
+        without = {k: v for k, v in ctx.overrides.items() if k != txn_id}
+        if flips_when(without):
+            adjusted.append(txn_id)
+    if len(adjusted) == 1:
+        return adjusted[0]
+
+    if not result.contributors:
+        return None
+    dropped: list[str] = []
     for txn_id in dict.fromkeys(result.contributors):
         patched = dict(ctx.overrides)
         patched[txn_id] = {**patched.get(txn_id, {}), "amount": None}
-        probe = evaluate_spec(spec, Context(ctx.txns, ctx.profile, patched))
-        if probe.status and probe.status != result.status:
-            flips.append(txn_id)
-    return flips[0] if len(flips) == 1 else None
+        if flips_when(patched):
+            dropped.append(txn_id)
+    if len(dropped) == 1:
+        return dropped[0]
+    return adjusted[0] if adjusted else None
 
 
 def load_specs(path: str | Path) -> dict[str, dict[str, dict]]:
