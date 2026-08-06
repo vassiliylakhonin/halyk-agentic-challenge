@@ -66,7 +66,11 @@ def category_total(ctx: Context, cat: Category, quarter: int | None = None
     as one puts every ratio built on operating costs out by its amount.
     """
     inflow = cat in INFLOW_CATEGORIES
-    related = ctx.profile.related_keys if ctx.profile else set()
+    # The exclusion is about operating lines. An asset bought from a related
+    # party is still capital expenditure, and a covenant on transfers to
+    # subsidiaries needs the whole capital total underneath it.
+    related = (ctx.profile.related_keys
+               if ctx.profile and cat is not Category.CAPEX else set())
     total = 0.0
     ids: list[str] = []
     for t in ctx.txns:

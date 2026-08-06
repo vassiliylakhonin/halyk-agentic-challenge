@@ -1,106 +1,167 @@
-# Document-grounded banking agent
+# Covenant compliance from a document pack
 
-Answers questions about a pack of banking documents. For each question it decides which
-document version is operative, pulls the facts that are split across several files,
-computes, and returns the answer with page-level references to the text it relied on.
+Reads a pack of banking documents and a transaction ledger, and decides for every
+financial covenant of every borrower whether it is met, what the constrained figure
+actually is, and which transaction settles the matter.
 
-Built as a competition submission for a banking document-agent challenge, and kept
-reusable: the competition-specific parts live in one adapter file.
+Built for a covenant-testing challenge. The competition-specific shapes live in one
+adapter; the rest is reusable.
 
-## What it does
+## The split that the design turns on
 
-1. **Ingest.** Reads PDF, images, XLSX, DOCX, CSV, JSON and plain text from one folder.
-   PDFs and images are also passed to the model as bytes, so scans and complex tables do
-   not depend on an OCR text layer being present.
-2. **Index.** Extracts header facts per document (type, subject, contract number,
-   effective date, version label, what it supersedes), then runs one cross-document pass
-   that marks which version is operative. This verdict is attached to every answer prompt.
-3. **Answer.** Per question: pick the documents, read them with citations enabled, work
-   the problem, and state every arithmetic step as a literal expression.
-4. **Check the arithmetic.** Every step the model states is re-evaluated in Python. A
-   mismatch triggers one repair pass. The interpreter wins arguments about multiplication.
-5. **Package.** `submission.json` is rewritten after every answer, so a valid file exists
-   on disk from the first result onward.
+A model reads. Python computes. Nothing else.
 
-## Why it is built this way
+The model is asked for three things, each returning JSON against a schema:
 
-The scored criteria are correctness, computational accuracy, and evidence. Each maps to a
-mechanism rather than to prompt wording:
+| Job | In | Out |
+|---|---|---|
+| `read_clause` | one covenant clause | a metric specification |
+| `read_supplement` | a borrower's non-contract documents | a list of ledger adjustments |
+| `read_page` | a page image | its text |
 
-| Criterion | Mechanism |
+A specification says what to compute, never a result:
+
+```json
+{"numerator": [{"cat": "capex"}], "denominator": [{"ebitda": {}}],
+ "direction": "max", "threshold": 9.0}
+```
+
+Half of every cell's score decays with relative error and reaches zero at five per
+cent. An interpreter does not misplace a decimal, so every total, ratio and verdict is
+computed in Python from an agreed description of the metric.
+
+## Result on the published open pack
+
+Scored against the organiser's own key with their published formula, from a clean
+folder, one command, nothing hand-written for these borrowers:
+
+| | |
 |---|---|
-| Correct decision | Version resolution runs once, up front, and travels with every prompt. A pipeline that quotes a superseded addendum is confidently wrong. |
-| Computational accuracy | `arith.py` recomputes the model's own stated expressions and repairs mismatches. |
-| Evidence | Citations are requested natively, so references carry document, page, and the quoted text rather than a reconstruction. |
+| score | **0.9389** of 1.0 |
+| statuses correct | 34 of 36 |
+| evidence transactions | 7 of 9 |
+| by clause | 6.1 · 0.900 — 6.2 · 1.000 — 6.3 · 0.917 |
+| empty cells | 0 |
+| wall clock | 9 minutes, three readings per clause |
 
-Citations and structured output cannot be requested in the same API call, so answering is
-split: a grounded turn produces prose plus citations, a second turn converts that into the
-typed record. That split is also where the arithmetic check fits.
+For scale: filling every cell with the commonest status for its clause number, without
+opening a document, scores 0.375.
 
-## Worked example
+## What the pack punishes, and what answers it
 
-`examples/` holds three documents describing one loan — a base agreement and two
-amendments, one of them superseded — plus four questions that a pipeline without
-version resolution gets wrong in a predictable way. See [examples/README.md](examples/README.md).
+The dataset is built around traps. Each one is a mechanism here, not a prompt.
 
-## Setup
+**A superseded edition of the agreement sits beside the current one.** Every borrower has
+both. Editions are detected by the marker printed on their first page, and clauses are
+read from the operative one.
+
+**Counterparty names are decoys.** An antenna mast lease is paid to a company with
+"Payroll Group" in its name. Categories come from the payment description alone; the
+counterparty is never consulted for them. The agreements say the same from the other
+side — related-party status follows the dossier, "not the payment narrative".
+
+**Related-party payments look like operating costs.** A management advisory retainer paid
+to a dossier-identified related party is on its own accounting line. Counting it as an
+operating cost puts every ratio built on operating costs out by its amount, and through
+EBITDA that reaches half of clause 6.1. Capital expenditure is the exception: an asset bought
+from a related party is still capital expenditure.
+
+**A holding sits just under the threshold.** Thresholds differ per borrower, from 20 to 40 per
+cent, and are read from the dossier rather than assumed. Entity names are matched on a
+normalised form, so "Aktau Holdings LLP" and "Aktau Holdings L.L.P." are one party while
+"Aktau Terminal Properties LLP" is not.
+
+**The auditor considers an adjustment and rejects it.** Applying it is the trap. Rejected
+adjustments are recorded as ignored, not applied.
+
+**A draft interim schedule carries the final report's reference number.** It is superseded
+by the final agreed-upon-procedures report and must not be applied.
+
+**An amount never reached the ledger export.** It is disclosed in a treasury memo, not by
+the auditor. A missing amount is a defect in the data, applied whoever reports it; a
+change of accounting line is a judgement, where the auditor's conclusion governs.
+
+**A dossier exists only as a scan**, with the account number printed inside the image.
+Pages below a text threshold are rendered and transcribed, and the fields derived from a
+document's text are rebuilt afterwards. Skip that rebuild and the document stays
+unlinked, and its borrower silently loses its related parties.
+
+**Interest on a finance sublease reads as a lease payment.** It is a financing cost.
+
+**One-off items below a materiality floor are not added back to EBITDA.**
+
+## Running it
 
 ```bash
 uv venv && uv pip install -e .
-cp .env.example .env    # then put your ANTHROPIC_API_KEY in .env
+cp .env.example .env          # then put your API key in .env
 ```
-
-## Run
 
 ```bash
-hac ingest                      # what got parsed, and which files have no text layer
-hac index                       # build the document catalogue and version verdicts
-hac run                         # answer everything, write submission.json
-hac run --limit 5               # smoke test on the first five questions
-hac package                     # rebuild submission.json from answers.jsonl, no API calls
-hac validate                    # check every question id is present and non-empty
+hac solve \
+  --docs-dir  path/to/documents \
+  --ledger    path/to/ledger.csv \
+  --template  path/to/submission_template.json \
+  --out       submission.json \
+  --samples   3
 ```
 
-Paths and models come from `config.json`; `--docs`, `--questions` and `--out` override
-them for one invocation.
+`--provider` selects `openai` or `anthropic`; the model name is discovered from the
+account rather than hard-coded, so a renamed or retired model does not stop a timed run.
 
-`hac run` resumes by default: answers already in `out/answers.jsonl` are not recomputed.
-Killing the process and restarting is safe and is the intended recovery path.
+Scoring a submission against a key:
 
-## Operating under a time limit
+```bash
+python -c "from hac.score import load_and_score; import json; print(json.dumps(load_and_score('submission.json','ground_truth.json'), ensure_ascii=False, indent=2))"
+```
 
-- `concurrency` in `config.json` is the throughput knob. Raise it until rate limits push
-  back, then stop.
-- `effort_answer` trades tokens for depth: `high` is the default, `medium` roughly halves
-  cost, `xhigh` is for the hardest questions.
-- `router_enabled: false` sends the whole corpus with every question and caches the
-  document prefix. Cheaper and better when the pack is small enough to fit; wasteful when
-  it is not.
-- `out/run_report.json` lists errors, arithmetic flags, answers with no citations, and
-  low-confidence answers. That is the queue to review by hand if time remains.
+## Behaviour under a deadline
 
-## Adapting to a different question or submission format
+The run is written for a fixed window with no second attempt.
 
-`src/hac/adapters/halyk_agentic.py` owns two functions and nothing else:
+- Every stage degrades rather than fails. A clause the model will not read falls back to
+  a rule-based reader; a metric that cannot be computed still writes a cell. An empty
+  cell and a wrong cell score the same, so no cell is left null.
+- The submission is rewritten after every borrower. A process killed at minute eighty
+  leaves a valid file behind.
+- Reading a clause is a sampling process: two runs of the same pipeline differed by 0.03.
+  Each clause and supplement is read `--samples` times and the agreed reading is used.
+  Agreement is reported per borrower, so a shaky reading is visible rather than silent.
+  Consensus ignores free-text fields, since two readings that agree on every adjustment
+  but word the reasoning differently are the same reading.
+- `out/specs_seen.json` and `out/adjustments_seen.json` record exactly what the model
+  read, for review while there is still time to review it.
 
-- `load_questions(path)` — already accepts a JSON list, an object keyed by id, JSONL, or
-  one question per line
-- `build_submission(results)` — the object written to `submission.json`
+## Layout
 
-Everything upstream works on `(qid, question)` pairs. Changing the output shape does not
-touch the pipeline.
+```
+src/hac/
+  bank.py         ledger, document linking, clause extraction   (no API calls)
+  kyc.py          related parties, ownership thresholds, name matching
+  categories.py   ordered rules from payment description to accounting line
+  spec.py         the metric language and its evaluator
+  audit.py        auditor adjustments applied to the ledger
+  extract.py      the three model jobs and their schemas
+  providers.py    OpenAI and Anthropic behind one interface
+  vote.py         consensus across repeated readings
+  solve.py        pack in, submission out
+  score.py        the organiser's scoring formula, reproduced
+```
+
+Everything in the first four files runs without an API key, which is why most of the
+work could be done and measured before a single call was made.
 
 ## Limits
 
-- No live retrieval. The agent reads the supplied pack and nothing else. If a rate or a
-  day-count basis is not in the documents, the answer says so instead of supplying a
-  market convention.
-- Not legal, compliance, financial, or investment advice. Output is for review by a person
-  who can check it against the source documents.
-- The arithmetic check verifies that stated expressions evaluate to stated values. It does
-  not verify that the expression was the right one to write.
-- No scoring or evaluation harness against a ground truth set. Correctness on the open
-  dataset has not been measured yet.
+- Two cells of the open pack are not solved. One covenant tests group capital expenditure
+  drawn from the consolidated statements of a parent that has no document in the pack.
+  One proportion sits within a rounding step of its threshold and lands on the wrong side.
+- The evidence rule names the transaction an adjustment acted on, or the one whose removal
+  changes the verdict. Where neither applies, the field is left empty rather than guessed.
+- Not an audit, and not legal, financial or accounting advice. Output is for review by a
+  person who can check it against the source documents.
+- Accuracy is measured on one published pack of twelve borrowers. That is the only
+  evidence there is, and it does not predict the same result on a pack nobody has read.
 
 ## Tests
 
@@ -108,6 +169,8 @@ touch the pipeline.
 pytest tests -q
 ```
 
-The offline suite covers expression evaluation and its refusal to execute code, the
-arithmetic mismatch path, every question-file shape the loader accepts, submission
-ordering, and ingestion. It needs no API key.
+Sixteen tests, no API key required: expression evaluation and its refusal to execute code,
+the arithmetic mismatch path, entity-name normalisation, dossier thresholds, the
+related-party exclusion, auditor adjustments and the materiality floor, consensus across
+readings, the scoring formula, and the field rebuild after a page is recovered from an
+image.
