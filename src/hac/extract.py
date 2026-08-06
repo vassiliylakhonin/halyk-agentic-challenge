@@ -130,6 +130,9 @@ means no adjustment. Record it in `ignored` instead.
 even when both carry the same reference number. Wording such as "ПРОЕКТ", \
 "ПРОМЕЖУТОЧНАЯ ВЕДОМОСТЬ" or "не является окончательной позицией" means ignore it.
 - Boilerplate accounting policy is not an adjustment.
+- A document that describes itself as internal or as a working paper is still a valid \
+source for a fact a covenant points at, such as treasury records of accrued tax. Reject \
+a document for being a superseded draft, never for being internal.
 
 Kinds of adjustment:
 - reclass: an amount moved from one accounting line to another.

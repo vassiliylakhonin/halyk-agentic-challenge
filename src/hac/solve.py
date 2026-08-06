@@ -97,15 +97,26 @@ def recover_pages(chat: providers.Chat, docs: list[PdfDoc], report: Report) -> N
 
 
 def auditor_text(docs: list[PdfDoc], scenario: str) -> str:
+    """Everything about a borrower except the agreements themselves.
+
+    Adjustments do not only live in the auditor's supplement. A treasury memo
+    carries an amount that never reached the ledger dump, and a covenant can
+    point at it explicitly. Anything that is not the contract is short, so all
+    of it goes to the reader rather than a guessed subset - a document type that
+    turns up for the first time on competition day is then already covered.
+    """
     parts: list[str] = []
     for d in docs:
-        if d.scenario != scenario:
+        if d.scenario != scenario or d.superseded:
             continue
         if SUPPLEMENT_MARKER in d.text:
             tail = d.text.split(SUPPLEMENT_MARKER, 1)[1]
-            parts.append(tail.split("За аудитора")[0][:8000])
-        elif any(m in d.text for m in PROCEDURES_MARKERS):
-            parts.append(" ".join(d.text.split())[:6000])
+            parts.append(f"<<< {d.doc_id} · covenant supplement >>>\n"
+                         + tail.split("За аудитора")[0][:8000])
+        elif d.has_covenants and d.n_pages > 10:
+            continue                      # the agreement is read clause by clause
+        else:
+            parts.append(f"<<< {d.doc_id} >>>\n" + " ".join(d.text.split())[:6000])
     return "\n\n---\n\n".join(parts)
 
 
