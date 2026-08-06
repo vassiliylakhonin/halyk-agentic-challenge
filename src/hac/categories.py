@@ -88,6 +88,8 @@ RULES: list[Rule] = [
     # --- traps that look like another category -------------------------------
     _r(r"\bcapitalised interest\b", Category.INTEREST,
        "capitalised interest is a financing cost, not capital expenditure"),
+    _r(r"\binterest\b.{0,24}\b(lease|sublease|hire purchase)\b", Category.INTEREST,
+       "interest on a finance lease is a financing cost, not a lease payment"),
     _r(r"\bmarketing\b.*\b(site hire|hire)\b|\b(outdoor|billboard) marketing\b",
        Category.MARKETING, "site hire bought for advertising is marketing"),
     _r(r"\b(repair|remediation|cleaning|clearance|overhaul|refurbish\w*|"

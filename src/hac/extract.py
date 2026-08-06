@@ -137,8 +137,11 @@ Kinds of adjustment:
 whose services fall in the next year.
 - amount_fix: a transaction whose amount is missing or wrong in the ledger dump, with \
 the corrected amount. An expense is negative.
-- off_ledger: an obligation disclosed by the auditor that is not booked as any \
-transaction.
+- off_ledger: an obligation or liability the auditor discloses in words while stating \
+that it is not booked as a transaction. Wording such as "раскрывается и не отражается \
+отдельной операцией в бухгалтерской книге" is exactly this case: emit it with its \
+amount and the line it belongs to. Do not leave such an amount only in prose - a figure \
+that is not in one of these lists is lost.
 - fx: a foreign-currency amount and the dollar amount that actually settled it.
 - addbacks: one-off items added back to EBITDA, with the materiality floor below which \
 an item is not added back. List every item; the floor is applied later."""
