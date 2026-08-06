@@ -134,7 +134,29 @@ class PdfDoc:
         return ""
 
 
-def extract_pdfs(docs_dir: str | Path, cache_path: str | Path | None = None) -> list[PdfDoc]:
+MIN_PAGE_CHARS = 40
+
+
+def load_ocr_cache(path: str | Path | None) -> dict[str, dict[str, str]]:
+    """Text recovered from pages that carry no text layer. The run-time vision
+    path writes this file; it is read here so downstream code never has to care
+    whether a page arrived as text or as an image."""
+    if not path or not Path(path).exists():
+        return {}
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {k: v for k, v in data.items() if isinstance(v, dict)}
+
+
+def pages_needing_ocr(pages: list[str]) -> list[int]:
+    """1-based page numbers whose extracted text is too thin to be real."""
+    return [i for i, t in enumerate(pages, start=1) if len(t.strip()) < MIN_PAGE_CHARS]
+
+
+def extract_pdfs(
+    docs_dir: str | Path,
+    cache_path: str | Path | None = None,
+    ocr_cache_path: str | Path | None = None,
+) -> list[PdfDoc]:
     """Extract every PDF once and cache the text, so reruns are instant."""
     cache = Path(cache_path) if cache_path else None
     if cache and cache.exists():
@@ -142,6 +164,7 @@ def extract_pdfs(docs_dir: str | Path, cache_path: str | Path | None = None) -> 
 
     from pypdf import PdfReader
 
+    ocr = load_ocr_cache(ocr_cache_path)
     docs: list[PdfDoc] = []
     for p in sorted(Path(docs_dir).glob("*.pdf")):
         try:
@@ -149,6 +172,10 @@ def extract_pdfs(docs_dir: str | Path, cache_path: str | Path | None = None) -> 
             pages = [(pg.extract_text() or "") for pg in reader.pages]
         except Exception:
             pages = []
+        recovered = ocr.get(p.stem, {})
+        for n in pages_needing_ocr(pages):
+            if str(n) in recovered:
+                pages[n - 1] = recovered[str(n)]
         text = "\n".join(pages)
         docs.append(PdfDoc(
             doc_id=p.stem, path=str(p), n_pages=len(pages) or 1,
