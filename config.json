@@ -18,5 +18,7 @@
   "index_file": "out/index.json",
   "answers_file": "out/answers.jsonl",
   "submission_file": "submission.json",
-  "adapter": "hac.adapters.halyk_agentic"
+  "adapter": "hac.adapters.halyk_agentic",
+  "team": "VizierAI",
+  "contact_email": "vassiliy.lakhonin@gmail.com"
 }

@@ -45,6 +45,10 @@ class Config:
     answers_file: str = "out/answers.jsonl"
     submission_file: str = "submission.json"
 
+    # Submission identity, written into the top-level fields of the file
+    team: str = ""
+    contact_email: str = ""
+
     # Which adapter maps internal answers -> the competition file
     adapter: str = "hac.adapters.halyk_agentic"
 
