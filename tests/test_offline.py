@@ -3,91 +3,32 @@ break under time pressure on competition day."""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
-from hac.adapters.halyk_agentic import build_submission, load_questions
-from hac.arith import check_steps, normalize, safe_eval
-from hac.ingest import load_corpus
-from hac.schema import AnswerRecord, Citation, QuestionResult, Step
+from hac import audit
+from hac.audit import Adjustments
+from hac.bank import PdfDoc, Txn, parse_amount, refresh_from_text
+from hac.categories import Category, classify
+from hac.kyc import KycProfile, Owner, normalize_entity, parse_kyc
+from hac.score import score_cell
+from hac.spec import Context, category_total, evaluate_spec, related_total
+from hac.vote import cell_consensus, consensus, spec_consensus
 
 
-def test_normalize_and_eval():
-    assert safe_eval("250 000 000 * 0.145 * 90 / 365") == pytest.approx(8938356.16, abs=0.01)
-    assert normalize("14,5%") == "14,5/100" or True  # comma decimals stay untouched
-    assert safe_eval("100 × 3") == 300
-    assert safe_eval("2 ^ 10") == 1024
-    assert safe_eval("round(1234.5678, 2)") == 1234.57
+# ----------------------------------------------------------------- ledger
+
+def test_dirty_amounts_parse_or_report_themselves_missing():
+    assert parse_amount("-366837.86") == pytest.approx(-366837.86)
+    assert parse_amount("(1 234.50)") == pytest.approx(-1234.50)
+    assert parse_amount("1,234,567.89") == pytest.approx(1234567.89)
+    assert parse_amount("") is None
+    assert parse_amount("n/a") is None
 
 
-def test_eval_rejects_code():
-    for bad in ["__import__('os').system('ls')", "open('x')", "x + 1", "[1,2][0]"]:
-        with pytest.raises(Exception):
-            safe_eval(bad)
-
-
-def test_check_steps_catches_bad_arithmetic():
-    steps = [
-        Step(label="interest", expression="1000 * 0.1", value=100.0),
-        Step(label="wrong", expression="1000 * 0.1", value=110.0),
-    ]
-    ok, notes, fixed = check_steps(steps)
-    assert not ok
-    assert len(notes) == 1
-    assert fixed[1].value == pytest.approx(100.0)
-
-
-def test_question_loader_shapes(tmp_path: Path):
-    a = tmp_path / "a.json"
-    a.write_text(json.dumps([{"id": 3, "question": "What rate applies?"}]))
-    assert load_questions(a) == [("3", "What rate applies?")]
-
-    b = tmp_path / "b.json"
-    b.write_text(json.dumps({"questions": [{"question_id": "q1", "text": "How much?"}]}))
-    assert load_questions(b) == [("q1", "How much?")]
-
-    c = tmp_path / "c.jsonl"
-    c.write_text('{"qid": 1, "query": "When?"}\n{"qid": 2, "query": "Who?"}\n')
-    assert load_questions(c) == [("1", "When?"), ("2", "Who?")]
-
-    d = tmp_path / "d.json"
-    d.write_text(json.dumps(["first?", "second?"]))
-    assert load_questions(d) == [("1", "first?"), ("2", "second?")]
-
-
-def test_submission_is_ordered_and_complete():
-    results = [
-        QuestionResult(
-            qid="10", question="b",
-            record=AnswerRecord(answer="B", value="2", steps=[], sources_used=["d2"],
-                                confidence=0.9, unresolved=""),
-            citations=[Citation(doc_id="d2", page_start=4, quote="clause")],
-        ),
-        QuestionResult(
-            qid="2", question="a",
-            record=AnswerRecord(answer="A", value="1", steps=[], sources_used=["d1"],
-                                confidence=0.8, unresolved=""),
-        ),
-    ]
-    out = build_submission(results)
-    assert [a["question_id"] for a in out["answers"]] == ["2", "10"]
-    assert out["answers"][1]["references"][0]["page"] == 4
-
-
-def test_ingest_reads_text_and_sheets(tmp_path: Path):
-    (tmp_path / "note.txt").write_text("Rate is 14.5% per annum.")
-    (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "data.csv").write_text("a,b\n1,2\n")
-    docs = load_corpus(tmp_path)
-    ids = {d.id for d in docs}
-    assert ids == {"note.txt", "sub/data.csv"}
-    assert "14.5%" in next(d for d in docs if d.id == "note.txt").plain_text()
-
+# ---------------------------------------------------------------- dossier
 
 def test_entity_normalisation_collapses_legal_forms():
-    from hac.kyc import normalize_entity as n
+    n = normalize_entity
     assert n("Atyrau Holding Group L.L.P.") == n("Atyrau Holding Group LLP")
     assert n("Aktau Holdings LLP") == n("Aktau Holdings L.L.P.")
     assert n("Ertis Capital, LLP") == n("Ertis Capital LLP")
@@ -96,7 +37,6 @@ def test_entity_normalisation_collapses_legal_forms():
 
 
 def test_kyc_reads_threshold_and_excludes_holdings_below_it():
-    from hac.kyc import parse_kyc
     text = (
         "Досье «Знай своего клиента» (KYC)\n"
         "Организация Доля голосующих прав\n"
@@ -107,15 +47,85 @@ def test_kyc_reads_threshold_and_excludes_holdings_below_it():
         "признаются связанными сторонами для целей Договора.\n"
         "Идентификация и проверка сведений\n"
     )
-    prof = parse_kyc(text)
-    assert prof.threshold == 20.0
-    assert len(prof.owners) == 3
-    assert [o.name for o in prof.related] == ["Aktau Holdings LLP"]
+    profile = parse_kyc(text)
+    assert profile.threshold == 20.0
+    assert len(profile.owners) == 3
+    assert [o.name for o in profile.related] == ["Aktau Holdings LLP"]
 
+
+# ------------------------------------------------------------- categories
+
+def test_description_decides_the_category_and_the_counterparty_never_does():
+    assert classify("Antenna mast lease — Pavlodar block",
+                    "Bridgeport Payroll Group")[0] is Category.LEASE
+    assert classify("Social tax remittance", "Bridgeport Payroll Group")[0] is Category.TAX
+
+
+def test_the_planted_category_traps():
+    assert classify("Purchase of grain conveyor equipment")[0] is Category.CAPEX
+    assert classify("Flood remediation and silo repair works")[0] is Category.OPEX
+    assert classify("Capitalised interest charge 2025")[0] is Category.INTEREST
+    assert classify("Interest on finance sublease")[0] is Category.INTEREST
+    assert classify("Outdoor marketing site hire")[0] is Category.MARKETING
+    assert classify("Payroll advance recovered from staff")[0] is Category.NON_OPERATING
+    assert classify("Term loan facility drawdown")[0] is Category.FINANCING
+
+
+# --------------------------------------------------- related parties, lines
+
+def _context() -> Context:
+    txns = [
+        Txn("T1", "2025-02-01", "A", "Plant Services LLP",
+            "Plant operating and maintenance expenses", -6166592.66, "USD"),
+        Txn("T2", "2025-03-01", "A", "Ertis Capital LLP",
+            "Management advisory retainer", -307018.08, "USD"),
+        Txn("T3", "2025-04-01", "A", "Ertis Capital LLP",
+            "Purchase of crusher equipment", -1000000.0, "USD"),
+    ]
+    profile = KycProfile(threshold=20.0, owners=[Owner("Ertis Capital LLP", 31.4)])
+    return Context(txns=txns, profile=profile)
+
+
+def test_related_party_payments_leave_the_operating_lines_alone():
+    ctx = _context()
+    opex, _ = category_total(ctx, Category.OPEX)
+    related, _ = related_total(ctx)
+    assert opex == pytest.approx(6166592.66)
+    assert related == pytest.approx(1307018.08)
+
+
+def test_capital_expenditure_keeps_related_party_assets():
+    capex, _ = category_total(_context(), Category.CAPEX)
+    assert capex == pytest.approx(1000000.0)
+
+
+# -------------------------------------------------------------- evaluator
+
+def test_a_springing_test_does_not_apply_until_it_is_triggered():
+    txns = [Txn("T1", "2025-01-01", "A", "Bank", "Term loan facility drawdown",
+                1000.0, "USD")]
+    spec = {"numerator": [{"cat": "financing"}], "direction": "max", "threshold": 0.5,
+            "springing": {"terms": [{"cat": "financing"}], "above": 5000.0}}
+    result = evaluate_spec(spec, Context(txns=txns))
+    assert result.status == "COMPLIANT"
+    assert "not triggered" in result.note
+
+
+def test_a_quarter_restriction_selects_only_that_quarter():
+    txns = [
+        Txn("T1", "2025-03-31", "A", "X", "Handling sales settlement", 100.0, "USD"),
+        Txn("T2", "2025-11-30", "A", "X", "Handling sales settlement", 400.0, "USD"),
+    ]
+    spec = {"numerator": [{"cat": "revenue", "quarter": 4}],
+            "direction": "min", "threshold": 350.0}
+    result = evaluate_spec(spec, Context(txns=txns))
+    assert result.actual == pytest.approx(400.0)
+    assert result.status == "COMPLIANT"
+
+
+# --------------------------------------------------- auditor adjustments
 
 def test_audit_reclassification_moves_a_line_and_marks_it():
-    from hac import audit
-    from hac.bank import Txn
     txns = [
         Txn("TXN-X-1", "2025-03-01", "ACC-1", "Irtysh Advisory Bureau",
             "Advisory retainer", -592296.10, "USD"),
@@ -129,24 +139,14 @@ def test_audit_reclassification_moves_a_line_and_marks_it():
 
 
 def test_addbacks_respect_the_materiality_floor():
-    from hac.audit import Adjustments
     adj = Adjustments(addbacks={"materiality": 300000.0,
                                 "items": [251338.94, 342905.28, 481247.63]})
     assert adj.add_back_total() == pytest.approx(824152.91)
 
 
-def test_scorer_matches_the_published_formula():
-    from hac.score import score_cell
-    key = {"status": "BREACH", "actual": 100.0, "evidence_txn_id": None}
-    assert score_cell({"status": "COMPLIANT", "actual": 100.0}, key, "S", "6.1").score == 0.0
-    assert score_cell({"status": "BREACH", "actual": 100.0}, key, "S", "6.1").score == 1.0
-    half = score_cell({"status": "BREACH", "actual": 102.5}, key, "S", "6.1").score
-    assert half == pytest.approx(0.5 + 0.30 * 0.5 + 0.20 * 0.5)
-    assert score_cell({"status": "BREACH", "actual": 105.0}, key, "S", "6.1").score == 0.5
-
+# --------------------------------------------------------------- consensus
 
 def test_consensus_ignores_wording_and_counts_substance():
-    from hac.vote import consensus
     a = {"reclass": [{"amount": 1.0, "to": "opex", "why": "one wording"}],
          "ignored": ["a long explanation"]}
     b = {"reclass": [{"amount": 1.0, "to": "opex", "why": "another wording"}],
@@ -158,7 +158,6 @@ def test_consensus_ignores_wording_and_counts_substance():
 
 
 def test_spec_consensus_falls_back_to_threshold_and_direction():
-    from hac.vote import spec_consensus
     a = {"numerator": [{"cat": "capex"}], "direction": "max", "threshold": 0.42}
     b = {"numerator": [{"cat": "opex"}], "direction": "max", "threshold": 0.42}
     c = {"numerator": [{"cat": "lease"}], "direction": "min", "threshold": 1.0}
@@ -168,7 +167,6 @@ def test_spec_consensus_falls_back_to_threshold_and_direction():
 
 
 def test_cell_consensus_takes_the_median_of_the_majority():
-    from hac.vote import cell_consensus
     out = cell_consensus([
         {"status": "BREACH", "actual": 1.70, "evidence_txn_id": "T1"},
         {"status": "BREACH", "actual": 1.68, "evidence_txn_id": "T1"},
@@ -179,29 +177,20 @@ def test_cell_consensus_takes_the_median_of_the_majority():
     assert out["evidence_txn_id"] == "T1"
 
 
-def test_related_party_payments_leave_the_other_lines_alone():
-    from hac.categories import Category
-    from hac.kyc import KycProfile, Owner
-    from hac.bank import Txn
-    from hac.spec import Context, category_total, related_total
+# ----------------------------------------------------------------- scoring
 
-    txns = [
-        Txn("T1", "2025-02-01", "A", "Plant Services LLP",
-            "Plant operating and maintenance expenses", -6166592.66, "USD"),
-        Txn("T2", "2025-03-01", "A", "Ertis Capital LLP",
-            "Management advisory retainer", -307018.08, "USD"),
-    ]
-    profile = KycProfile(threshold=20.0, owners=[Owner("Ertis Capital LLP", 31.4)])
-    ctx = Context(txns=txns, profile=profile)
+def test_scorer_matches_the_published_formula():
+    key = {"status": "BREACH", "actual": 100.0, "evidence_txn_id": None}
+    assert score_cell({"status": "COMPLIANT", "actual": 100.0}, key, "S", "6.1").score == 0.0
+    assert score_cell({"status": "BREACH", "actual": 100.0}, key, "S", "6.1").score == 1.0
+    half = score_cell({"status": "BREACH", "actual": 102.5}, key, "S", "6.1").score
+    assert half == pytest.approx(0.5 + 0.30 * 0.5 + 0.20 * 0.5)
+    assert score_cell({"status": "BREACH", "actual": 105.0}, key, "S", "6.1").score == 0.5
 
-    opex, _ = category_total(ctx, Category.OPEX)
-    related, _ = related_total(ctx)
-    assert opex == pytest.approx(6166592.66)   # the retainer is not an operating cost
-    assert related == pytest.approx(307018.08)
 
+# ---------------------------------------------------------- recovered pages
 
 def test_recovered_pages_restore_the_derived_fields():
-    from hac.bank import PdfDoc, refresh_from_text
     doc = PdfDoc(doc_id="d", path="d.pdf", n_pages=1, text="", pages=[""])
     assert doc.accounts == []
     doc.pages[0] = "Досье KYC · Счёт ACC-7806 · пункт 6.1"

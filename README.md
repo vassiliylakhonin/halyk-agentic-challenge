@@ -109,10 +109,16 @@ hac solve \
 `--provider` selects `openai` or `anthropic`; the model name is discovered from the
 account rather than hard-coded, so a renamed or retired model does not stop a timed run.
 
-Scoring a submission against a key:
+Before sending, a structural check against the template:
 
 ```bash
-python -c "from hac.score import load_and_score; import json; print(json.dumps(load_and_score('submission.json','ground_truth.json'), ensure_ascii=False, indent=2))"
+hac check --submission submission.json --template path/to/submission_template.json
+```
+
+And where a key exists, scoring with the organiser's own formula:
+
+```bash
+hac score --submission submission.json --key path/to/ground_truth.json --cells
 ```
 
 ## Behaviour under a deadline
@@ -144,8 +150,11 @@ src/hac/
   extract.py      the three model jobs and their schemas
   providers.py    OpenAI and Anthropic behind one interface
   vote.py         consensus across repeated readings
+  pipeline.py     choosing which document of a borrower to read from
+  covenants.py    the rule-based clause reader used when the model path fails
   solve.py        pack in, submission out
   score.py        the organiser's scoring formula, reproduced
+  cli.py          solve, score, check
 ```
 
 Everything in the first four files runs without an API key, which is why most of the

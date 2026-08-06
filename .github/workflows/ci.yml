@@ -22,5 +22,5 @@ jobs:
           pip install -e . pytest
       - name: Offline test suite
         run: pytest tests -q
-      - name: Ingest the worked example
-        run: hac --docs examples/docs ingest
+      - name: CLI is wired
+        run: hac solve --help
