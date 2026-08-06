@@ -143,3 +143,37 @@ def test_scorer_matches_the_published_formula():
     half = score_cell({"status": "BREACH", "actual": 102.5}, key, "S", "6.1").score
     assert half == pytest.approx(0.5 + 0.30 * 0.5 + 0.20 * 0.5)
     assert score_cell({"status": "BREACH", "actual": 105.0}, key, "S", "6.1").score == 0.5
+
+
+def test_consensus_ignores_wording_and_counts_substance():
+    from hac.vote import consensus
+    a = {"reclass": [{"amount": 1.0, "to": "opex", "why": "one wording"}],
+         "ignored": ["a long explanation"]}
+    b = {"reclass": [{"amount": 1.0, "to": "opex", "why": "another wording"}],
+         "ignored": ["a different explanation"]}
+    c = {"reclass": [{"amount": 2.0, "to": "tax"}], "ignored": []}
+    agreed, share = consensus([a, b, c])
+    assert agreed["reclass"][0]["amount"] == 1.0
+    assert share == pytest.approx(2 / 3)
+
+
+def test_spec_consensus_falls_back_to_threshold_and_direction():
+    from hac.vote import spec_consensus
+    a = {"numerator": [{"cat": "capex"}], "direction": "max", "threshold": 0.42}
+    b = {"numerator": [{"cat": "opex"}], "direction": "max", "threshold": 0.42}
+    c = {"numerator": [{"cat": "lease"}], "direction": "min", "threshold": 1.0}
+    spec, share, how = spec_consensus([a, b, c])
+    assert spec["threshold"] == 0.42 and spec["direction"] == "max"
+    assert "threshold and direction" in how
+
+
+def test_cell_consensus_takes_the_median_of_the_majority():
+    from hac.vote import cell_consensus
+    out = cell_consensus([
+        {"status": "BREACH", "actual": 1.70, "evidence_txn_id": "T1"},
+        {"status": "BREACH", "actual": 1.68, "evidence_txn_id": "T1"},
+        {"status": "COMPLIANT", "actual": 9.0, "evidence_txn_id": None},
+    ])
+    assert out["status"] == "BREACH"
+    assert out["actual"] == pytest.approx(1.69)
+    assert out["evidence_txn_id"] == "T1"

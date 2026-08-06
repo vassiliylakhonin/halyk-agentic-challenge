@@ -100,7 +100,7 @@ def cmd_solve(cfg: Config, args) -> int:
     from .solve import solve
     report = solve(
         args.docs_dir, args.ledger, args.template, args.out or cfg.submission_file,
-        provider=args.provider, model=args.llm_model,
+        provider=args.provider, model=args.llm_model, samples=args.samples,
         team=cfg.team, contact_email=cfg.contact_email,
         text_cache=args.text_cache,
     )
@@ -171,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("--provider", default="openai", choices=["openai", "anthropic"])
     sv.add_argument("--llm-model", default=None)
     sv.add_argument("--text-cache", default=None)
+    sv.add_argument("--samples", type=int, default=3,
+                    help="readings per clause; the consensus is used")
     sv.set_defaults(func=cmd_solve)
 
     sub.add_parser("package", help="rebuild submission.json from answers.jsonl"

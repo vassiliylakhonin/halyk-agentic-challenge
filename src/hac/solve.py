@@ -27,6 +27,7 @@ from .extract import read_clause, read_page, read_supplement
 from .kyc import is_kyc, parse_kyc
 from .pipeline import agreement_for
 from .spec import Context, decisive_txn, evaluate_spec
+from .vote import consensus, repeat, spec_consensus
 
 SUPPLEMENT_MARKER = "ДОПОЛНЕНИЕ О СОБЛЮДЕНИИ КОВЕНАНТОВ"
 PROCEDURES_MARKERS = ("согласованных процедур", "ПРОМЕЖУТОЧНАЯ ВЕДОМОСТЬ")
@@ -126,6 +127,7 @@ def solve(
     *,
     provider: str = "openai",
     model: str | None = None,
+    samples: int = 1,
     team: str = "",
     contact_email: str = "",
     text_cache: str | Path | None = None,
@@ -171,11 +173,15 @@ def solve(
         if chat is not None:
             text = auditor_text(docs, scenario)
             if text.strip():
-                try:
-                    block = read_supplement(chat, text)
-                except Exception as e:
+                readings = repeat(
+                    lambda: read_supplement(chat, text), samples,
+                    lambda e: report.failures.append(
+                        f"{scenario} supplement: {type(e).__name__}: {e}"))
+                agreed, share = consensus(readings)
+                block = agreed or (readings[0] if readings else {})
+                if readings and share < 1.0:
                     report.failures.append(
-                        f"{scenario} supplement: {type(e).__name__}: {e}")
+                        f"{scenario} supplement agreed by {share:.0%} of readings")
 
         adj = audit.build(block, txns)
         ctx = Context(txns=txns, profile=kyc_profile(docs, scenario),
@@ -188,13 +194,14 @@ def solve(
             spec: dict | None = None
 
             if chat is not None and clause:
-                try:
-                    candidate = read_clause(chat, clause)
-                    if candidate.get("numerator"):
-                        spec, trace.source = candidate, "model"
-                except Exception as e:
-                    report.failures.append(
-                        f"{scenario} {covenant} clause: {type(e).__name__}: {e}")
+                readings = repeat(
+                    lambda: read_clause(chat, clause), samples,
+                    lambda e: report.failures.append(
+                        f"{scenario} {covenant} clause: {type(e).__name__}: {e}"))
+                candidate, share, how = spec_consensus(readings)
+                if candidate and candidate.get("numerator"):
+                    spec, trace.source = candidate, "model"
+                    trace.note = f"{how} ({share:.0%})"
 
             if spec is None and clause:
                 fallback = rule_read_clause(clause)
