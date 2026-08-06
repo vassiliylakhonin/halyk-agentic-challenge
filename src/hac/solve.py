@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any
 
 from . import audit, providers
-from .bank import Ledger, PdfDoc, extract_pdfs, link_documents, pages_needing_ocr
+from .bank import (Ledger, PdfDoc, extract_pdfs, link_documents,
+                   pages_needing_ocr, refresh_from_text)
 from .categories import Category
 from .covenants import read_clause as rule_read_clause
 from .extract import read_clause, read_page, read_supplement
@@ -94,7 +95,7 @@ def recover_pages(chat: providers.Chat, docs: list[PdfDoc], report: Report) -> N
                 report.ocr_pages += 1
             except Exception as e:
                 report.failures.append(f"ocr {doc.doc_id} p{n}: {type(e).__name__}")
-        doc.text = "\n".join(doc.pages)
+        refresh_from_text(doc)
 
 
 def auditor_text(docs: list[PdfDoc], scenario: str) -> str:

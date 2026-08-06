@@ -198,3 +198,13 @@ def test_related_party_payments_leave_the_other_lines_alone():
     related, _ = related_total(ctx)
     assert opex == pytest.approx(6166592.66)   # the retainer is not an operating cost
     assert related == pytest.approx(307018.08)
+
+
+def test_recovered_pages_restore_the_derived_fields():
+    from hac.bank import PdfDoc, refresh_from_text
+    doc = PdfDoc(doc_id="d", path="d.pdf", n_pages=1, text="", pages=[""])
+    assert doc.accounts == []
+    doc.pages[0] = "Досье KYC · Счёт ACC-7806 · пункт 6.1"
+    refresh_from_text(doc)
+    assert doc.accounts == ["ACC-7806"]
+    assert doc.has_covenants is True

@@ -192,6 +192,20 @@ def extract_pdfs(
     return docs
 
 
+def refresh_from_text(doc: PdfDoc) -> PdfDoc:
+    """Recompute the fields derived from a document's text.
+
+    Needed after pages are recovered from images: an account number, a
+    supersession marker or a covenant clause can live inside a scan, and until
+    the derived fields are rebuilt the document stays unlinked and invisible.
+    """
+    doc.text = "\n".join(doc.pages)
+    doc.accounts = sorted(set(ACC_RE.findall(doc.text)))
+    doc.superseded = any(m in doc.text for m in SUPERSEDED_MARKERS)
+    doc.has_covenants = bool(re.search(r"\b6\.[123]\b", doc.text))
+    return doc
+
+
 def link_documents(docs: list[PdfDoc], ledger: Ledger) -> list[PdfDoc]:
     """Attach a scenario to every document that names an account we can place."""
     acc2scen = ledger.account_to_scenario()
