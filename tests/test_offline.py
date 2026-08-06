@@ -177,3 +177,24 @@ def test_cell_consensus_takes_the_median_of_the_majority():
     assert out["status"] == "BREACH"
     assert out["actual"] == pytest.approx(1.69)
     assert out["evidence_txn_id"] == "T1"
+
+
+def test_related_party_payments_leave_the_other_lines_alone():
+    from hac.categories import Category
+    from hac.kyc import KycProfile, Owner
+    from hac.bank import Txn
+    from hac.spec import Context, category_total, related_total
+
+    txns = [
+        Txn("T1", "2025-02-01", "A", "Plant Services LLP",
+            "Plant operating and maintenance expenses", -6166592.66, "USD"),
+        Txn("T2", "2025-03-01", "A", "Ertis Capital LLP",
+            "Management advisory retainer", -307018.08, "USD"),
+    ]
+    profile = KycProfile(threshold=20.0, owners=[Owner("Ertis Capital LLP", 31.4)])
+    ctx = Context(txns=txns, profile=profile)
+
+    opex, _ = category_total(ctx, Category.OPEX)
+    related, _ = related_total(ctx)
+    assert opex == pytest.approx(6166592.66)   # the retainer is not an operating cost
+    assert related == pytest.approx(307018.08)

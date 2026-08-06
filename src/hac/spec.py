@@ -58,12 +58,23 @@ def _quarter(date: str) -> int:
 
 def category_total(ctx: Context, cat: Category, quarter: int | None = None
                    ) -> tuple[float, list[str]]:
+    """Total on one accounting line.
+
+    Payments to related parties sit on their own line and are not part of any
+    other. The pack makes this visible: a management advisory retainer paid to a
+    dossier-identified related party reads as an operating cost, and counting it
+    as one puts every ratio built on operating costs out by its amount.
+    """
     inflow = cat in INFLOW_CATEGORIES
+    related = ctx.profile.related_keys if ctx.profile else set()
     total = 0.0
     ids: list[str] = []
     for t in ctx.txns:
         amount, c = ctx.effective(t)
         if amount is None or c is not cat:
+            continue
+        if (not inflow and related
+                and normalize_entity(t.counterparty) in related):
             continue
         if inflow and amount <= 0:
             continue
