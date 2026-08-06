@@ -95,6 +95,19 @@ def cmd_run(cfg: Config, args) -> int:
     return 0
 
 
+def cmd_solve(cfg: Config, args) -> int:
+    """Competition-day entry point: a document pack in, a submission out."""
+    from .solve import solve
+    report = solve(
+        args.docs_dir, args.ledger, args.template, args.out or cfg.submission_file,
+        provider=args.provider, model=args.llm_model,
+        team=cfg.team, contact_email=cfg.contact_email,
+        text_cache=args.text_cache,
+    )
+    print(json.dumps(report.summary(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_package(cfg: Config, args) -> int:
     """Rebuild submission.json from answers.jsonl without calling the API."""
     from .runner import load_done
@@ -149,6 +162,16 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--reindex", action="store_true")
     r.add_argument("--no-resume", action="store_true")
     r.set_defaults(func=cmd_run)
+
+    sv = sub.add_parser("solve", help="document pack -> submission.json")
+    sv.add_argument("--docs-dir", required=True)
+    sv.add_argument("--ledger", required=True)
+    sv.add_argument("--template", required=True)
+    sv.add_argument("--out", default=None)
+    sv.add_argument("--provider", default="openai", choices=["openai", "anthropic"])
+    sv.add_argument("--llm-model", default=None)
+    sv.add_argument("--text-cache", default=None)
+    sv.set_defaults(func=cmd_solve)
 
     sub.add_parser("package", help="rebuild submission.json from answers.jsonl"
                    ).set_defaults(func=cmd_package)
