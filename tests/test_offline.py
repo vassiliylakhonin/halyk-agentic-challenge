@@ -84,3 +84,30 @@ def test_ingest_reads_text_and_sheets(tmp_path: Path):
     ids = {d.id for d in docs}
     assert ids == {"note.txt", "sub/data.csv"}
     assert "14.5%" in next(d for d in docs if d.id == "note.txt").plain_text()
+
+
+def test_entity_normalisation_collapses_legal_forms():
+    from hac.kyc import normalize_entity as n
+    assert n("Atyrau Holding Group L.L.P.") == n("Atyrau Holding Group LLP")
+    assert n("Aktau Holdings LLP") == n("Aktau Holdings L.L.P.")
+    assert n("Ertis Capital, LLP") == n("Ertis Capital LLP")
+    assert n("Hartley Building Services (Turkistan point)") == n("Hartley Building Services")
+    assert n("Aktau Holdings LLP") != n("Aktau Terminal Properties LLP")
+
+
+def test_kyc_reads_threshold_and_excludes_holdings_below_it():
+    from hac.kyc import parse_kyc
+    text = (
+        "Досье «Знай своего клиента» (KYC)\n"
+        "Организация Доля голосующих прав\n"
+        "Aktau Holdings LLP 34.5%\n"
+        "Kaspi Marine Engineering LLP 18.7%\n"
+        "Ural Crane Works LLP 6.2%\n"
+        "Организации, в которых Группа владеет 20.0% и более голосующих прав, "
+        "признаются связанными сторонами для целей Договора.\n"
+        "Идентификация и проверка сведений\n"
+    )
+    prof = parse_kyc(text)
+    assert prof.threshold == 20.0
+    assert len(prof.owners) == 3
+    assert [o.name for o in prof.related] == ["Aktau Holdings LLP"]
