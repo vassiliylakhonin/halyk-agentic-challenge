@@ -8,3 +8,6 @@ data/open/*
 out/*
 !out/.gitkeep
 .DS_Store
+
+# Answers are not published while the competition is open.
+submission*.json
