@@ -1,14 +1,16 @@
-"""Merge two complete runs into one submission.
+"""Merge complete runs into one submission.
 
-Two runs of the pipeline over the same pack agree on most cells and disagree on
-a few, because reading a clause is a sampling process. Where they disagree the
+Runs of the pipeline over the same pack agree on most cells and disagree on a
+few, because reading a clause is a sampling process. Where they disagree the
 choice is made by rule, in this order:
 
 1. A metric of exactly zero is almost always a failed reading, not a covenant
-   that happens to sit at zero. The run that produced a number wins.
-2. Otherwise, the run whose specification was unanimous across its own repeated
-   readings wins over one that was only a majority.
-3. Otherwise the later run wins, because it carries the fixes made between them.
+   that happens to sit at zero. Runs that produced a number win.
+2. Then a straight majority of the remaining runs on status, with the median of
+   the agreeing runs as the figure.
+3. A tie goes to the run whose specification was unanimous across its own
+   repeated readings, and failing that to the latest run, which carries the
+   fixes made between them.
 
 Every decision is printed with the rule that made it, so the merge can be read
 rather than trusted.

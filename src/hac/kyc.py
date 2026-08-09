@@ -15,7 +15,7 @@ document rather than assumed.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # Legal-form tokens, compared after punctuation is stripped and dotted
 # abbreviations are collapsed ("l.l.p." arrives here as "llp").
@@ -70,10 +70,56 @@ class Owner:
         return normalize_entity(self.name)
 
 
+# The dossier comes in two forms. One prints an ownership table and a threshold.
+# The other declares status per counterparty by name, and then the percentage
+# never appears: "Контрагент «Altyn Capital L.L.P.» классифицирован как
+# АФФИЛИРОВАННОЕ ЛИЦО Заёмщика". Both are read; a named declaration is decisive
+# on its own, because it states the conclusion the threshold exists to reach.
+def _loose(word: str) -> str:
+    """A pattern tolerant of the stray spaces PDF extraction leaves inside a
+    word: the pack yields "ОГР АНИЧЕННОЙ" and "У становленные" routinely."""
+    return r"\s*".join(re.escape(ch) for ch in word)
+
+
+_STATUSES = {
+    "unrestricted": ("НЕОГРАНИЧЕННОЙ ДОЧЕРНЕЙ", "НЕОГРАНИЧЕННАЯ ДОЧЕРНЯЯ",
+                     "UNRESTRICTED SUBSIDIARY"),
+    "restricted": ("ОГРАНИЧЕННОЙ ДОЧЕРНЕЙ", "ОГРАНИЧЕННАЯ ДОЧЕРНЯЯ",
+                   "RESTRICTED SUBSIDIARY"),
+    "related": ("АФФИЛИРОВАННОЕ ЛИЦО", "АФФИЛИРОВАННЫМ ЛИЦОМ",
+                "СВЯЗАННОЙ СТОРОНОЙ", "СВЯЗАННАЯ СТОРОНА",
+                "RELATED PARTY", "AFFILIATE"),
+}
+
+# Longest first, and "неограниченной" before "ограниченной", so a negation is
+# never read as its opposite.
+_ALL_STATUSES = [(kind, phrase)
+                 for kind in ("unrestricted", "restricted", "related")
+                 for phrase in _STATUSES[kind]]
+
+# The name is anchored to the word that introduces it, so a statute cited in
+# quotation marks later in the dossier is never read as a counterparty.
+RECORD_RE = re.compile(
+    r"(?:Контрагент|Counterparty|Организация|Entity)\s*[«\"]([^»\"]{3,70})[»\"]"
+    r"(.{0,90}?)(" + "|".join(_loose(p) for _, p in _ALL_STATUSES) + r")",
+    re.I | re.S,
+)
+
+
+def _status_kind(matched: str) -> str:
+    squashed = re.sub(r"\s+", "", matched).upper()
+    for kind, phrase in _ALL_STATUSES:
+        if squashed.startswith(re.sub(r"\s+", "", phrase).upper()):
+            return kind
+    return ""
+
+
 @dataclass
 class KycProfile:
     threshold: float
     owners: list[Owner]
+    declared_related: list[str] = field(default_factory=list)
+    declared_unrestricted: list[str] = field(default_factory=list)
 
     @property
     def related(self) -> list[Owner]:
@@ -81,7 +127,14 @@ class KycProfile:
 
     @property
     def related_keys(self) -> set[str]:
-        return {o.key for o in self.related if o.key}
+        keys = {o.key for o in self.related if o.key}
+        keys |= {normalize_entity(n) for n in self.declared_related}
+        return {k for k in keys if k}
+
+    @property
+    def unrestricted_keys(self) -> set[str]:
+        return {normalize_entity(n) for n in self.declared_unrestricted
+                if normalize_entity(n)}
 
 
 def _num(s: str) -> float:
@@ -105,6 +158,16 @@ def parse_kyc(text: str, default_threshold: float = 20.0) -> KycProfile:
     if m:
         threshold = _num(m.group(1))
 
+    declared_related: list[str] = []
+    declared_unrestricted: list[str] = []
+    for m in RECORD_RE.finditer(flat):
+        name = m.group(1).strip()
+        kind = _status_kind(m.group(3))
+        if kind == "unrestricted":
+            declared_unrestricted.append(name)
+        elif kind == "related":
+            declared_related.append(name)
+
     region = ""
     for start in TABLE_START:
         i = flat.find(start)
@@ -112,7 +175,9 @@ def parse_kyc(text: str, default_threshold: float = 20.0) -> KycProfile:
             region = flat[i + len(start):]
             break
     if not region:
-        return KycProfile(threshold=threshold, owners=[])
+        return KycProfile(threshold=threshold, owners=[],
+                          declared_related=declared_related,
+                          declared_unrestricted=declared_unrestricted)
     for end in TABLE_END:
         j = region.find(end)
         if j >= 0:
@@ -128,12 +193,23 @@ def parse_kyc(text: str, default_threshold: float = 20.0) -> KycProfile:
             continue
         seen.add(key)
         owners.append(Owner(name=name, share=_num(m.group(2))))
-    return KycProfile(threshold=threshold, owners=owners)
+    return KycProfile(threshold=threshold, owners=owners,
+                      declared_related=declared_related,
+                      declared_unrestricted=declared_unrestricted)
+
+
+NONE_FOUND = ("Связанные стороны среди контрагентов не выявлены",
+              "No related parties were identified")
 
 
 def is_kyc(text: str) -> bool:
     """The pack also contains internal notes that merely mention KYC. The
-    dossier itself is the one with the beneficial-ownership table."""
-    return ("Знай своего клиента" in text or "Know Your Customer" in text) and any(
-        s in text for s in TABLE_START
-    )
+    dossier is the one that prints the ownership table, declares a
+    counterparty's status by name, or states that there are none - the third
+    form matters because a dossier saying "none found" is an answer, while a
+    dossier that was never recognised is a silent loss."""
+    named = ("Знай своего клиента" in text or "Know Your Customer" in text)
+    flat = " ".join(text.split())
+    return named and (any(s in text for s in TABLE_START)
+                      or bool(RECORD_RE.search(flat))
+                      or any(n in flat for n in NONE_FOUND))
