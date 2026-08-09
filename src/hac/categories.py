@@ -97,8 +97,17 @@ RULES: list[Rule] = [
        "repair and upkeep stay in operating costs"),
 
     # --- capital expenditure -------------------------------------------------
-    _r(r"\b(purchase|acquisition|procurement) of\b.*\b(equipment|machinery|plant|"
-       r"vehicle|fleet|conveyor|crane|line|system|installation|asset)\b",
+    # The verb can stand on either side of the asset, or be absent altogether:
+    # "Purchase of grain conveyor equipment", "Flotation equipment purchase" and
+    # "Grain silo aeration equipment" are one and the same kind of line. The
+    # repair rule above runs first, so upkeep of the same plant stays operating.
+    _r(r"^(?!.*\b(lease|rent|rental|hire|insurance|premium|tax|levy)\b).*"
+       r"\b(equipment|machinery|plant and equipment|conveyor|crane|tooling|"
+       r"rolling stock|vehicle fleet|production line|network equipment)\b",
+       Category.CAPEX, "an asset acquired or transferred, where the line is not "
+                       "renting or insuring it"),
+    _r(r"\b(purchase|acquisition|procurement) of\b.*\b(vehicle|fleet|system|"
+       r"installation|asset|land|building|premises)\b",
        Category.CAPEX, "acquisition of an asset"),
     _r(r"\b(construction|erection|installation) of\b|\bcapital (works|project|"
        r"expenditure|programme)\b|\bnew build\b", Category.CAPEX,
@@ -111,7 +120,7 @@ RULES: list[Rule] = [
     _r(r"\b(marketing|advertis\w+|ad campaign|media buy|sponsorship|exhibition|"
        r"newsletter|collateral|press insertion|promotional|point-of-sale|"
        r"brand|livery)\b", Category.MARKETING, "marketing line"),
-    _r(r"\b(lease|rent|tenancy|ground lease|sublease)\b", Category.LEASE,
+    _r(r"\b(lease|rent|rental|tenancy|ground lease|sublease)\b", Category.LEASE,
        "lease or rent"),
     _r(r"\b(electricity|power|water|gas|heating|utility|utilities|metering|"
        r"network capacity|waste|sewer)\b", Category.UTILITIES, "utility supply"),
