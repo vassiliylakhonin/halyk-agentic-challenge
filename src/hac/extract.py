@@ -173,8 +173,10 @@ name as printed. Render a table as one row per line, cells separated by spaces, 
 the column header line kept. Do not summarise, translate or explain."""
 
 
-def _clean(term: dict[str, Any]) -> dict[str, Any] | None:
+def _clean(term: Any) -> dict[str, Any] | None:
     """Model output -> the internal term form, dropping nulls."""
+    if not isinstance(term, dict):
+        return None
     out: dict[str, Any] = {}
     if term.get("max_of"):
         out["max"] = [{"cat": c} for c in term["max_of"]]

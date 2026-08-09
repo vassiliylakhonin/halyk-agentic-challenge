@@ -179,7 +179,7 @@ def solve(
             json.dumps(submission, ensure_ascii=False, indent=2), encoding="utf-8")
 
     for scenario, cells in template.get("answers", {}).items():
-        agreement = agreement_for(scenario, docs)
+        agreement = agreement_for(scenario, docs, set(cells))
         txns = by_scenario.get(scenario, [])
 
         block: dict = {}

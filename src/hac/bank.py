@@ -15,7 +15,10 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ACC_RE = re.compile(r"\bACC-\d{4}\b")
+# Account identifiers are not one fixed prefix: the packs use ACC-7801 and
+# TELE-4471 alike. The ledger is the authority on which ones exist, so a
+# document is linked by finding an id the ledger actually knows.
+ACC_RE = re.compile(r"\b[A-Z]{2,8}-\d{3,6}\b")
 TXN_RE = re.compile(r"\bTXN-[A-Z0-9]+-\d+\b")
 
 # Printed on the front of every replaced edition in the open pack.
@@ -209,17 +212,40 @@ def refresh_from_text(doc: PdfDoc) -> PdfDoc:
 def link_documents(docs: list[PdfDoc], ledger: Ledger) -> list[PdfDoc]:
     """Attach a scenario to every document that names an account we can place."""
     acc2scen = ledger.account_to_scenario()
+    known = set(acc2scen)
     for d in docs:
-        scens = {acc2scen[a] for a in d.accounts if a in acc2scen}
+        found = {a for a in d.accounts if a in known}
+        if not found:
+            # The candidate regex can miss an unusual shape; fall back to looking
+            # for the ledger's own identifiers verbatim.
+            found = {a for a in known if a in d.text}
+        scens = {acc2scen[a] for a in found}
         d.scenario = sorted(scens)[0] if len(scens) == 1 else ""
     return docs
 
 
-def agreements_by_scenario(docs: list[PdfDoc]) -> dict[str, dict[str, list[PdfDoc]]]:
-    """Per scenario, the credit agreements split into current and superseded."""
+def clause_numbers(text: str) -> set[str]:
+    """Clause numbers a document prints as headings."""
+    return {m.group(1) for m in CLAUSE_RE.finditer(text)}
+
+
+def agreements_by_scenario(
+    docs: list[PdfDoc], wanted: set[str] | None = None
+) -> dict[str, dict[str, list[PdfDoc]]]:
+    """Per scenario, the credit agreements split into current and superseded.
+
+    Which clause numbers carry the covenants is a property of the pack, not a
+    constant: one borrower prints them under 6.1 and another under 5.1. So a
+    document counts as the agreement when it prints the clauses the template
+    asks about, and `wanted` comes from the template.
+    """
     out: dict[str, dict[str, list[PdfDoc]]] = defaultdict(
         lambda: {"current": [], "superseded": []})
     for d in docs:
-        if d.has_covenants and d.scenario:
+        if not d.scenario:
+            continue
+        found = clause_numbers(d.text)
+        hit = bool(found & wanted) if wanted else d.has_covenants
+        if hit:
             out[d.scenario]["superseded" if d.superseded else "current"].append(d)
     return dict(out)
