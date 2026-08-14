@@ -30,22 +30,25 @@ Half of every cell's score decays with relative error and reaches zero at five p
 cent. An interpreter does not misplace a decimal, so every total, ratio and verdict is
 computed in Python from an agreed description of the metric.
 
-## Result on the published open pack
+## Results, and the gap between them
 
-Scored against the organiser's own key with their published formula, from a clean
-folder, one command, nothing hand-written for these borrowers:
+| | Open pack, 12 borrowers | Hidden pack, 27 borrowers |
+|---|---|---|
+| score | 0.9389 | **0.6139** |
+| placing | — | 83rd of 160 |
 
-| | |
-|---|---|
-| score | **0.9389** of 1.0 |
-| statuses correct | 34 of 36 |
-| evidence transactions | 7 of 9 |
-| by clause | 6.1 · 0.900 — 6.2 · 1.000 — 6.3 · 0.917 |
-| empty cells | 0 |
-| wall clock | 9 minutes, three readings per clause |
+The left column is the pack this code could be measured against while it was being
+written. The right column is the one that counts, and the 32-point fall between them is
+the honest headline of this repository. The winning entry scored 0.9636 on the hidden
+pack, which is roughly what the left column promised and this code did not deliver.
 
-For scale: filling every cell with the commonest status for its clause number, without
-opening a document, scores 0.375.
+Read [why the two columns differ](#why-the-columns-differ) before taking the left one as
+evidence of anything.
+
+Detail on the open pack, from a clean folder, one command, nothing hand-written for
+those borrowers: 34 of 36 statuses correct, 7 of 9 evidence transactions, no empty
+cells, nine minutes at three readings per clause. Filling every cell with the commonest
+status for its clause number, without opening a document, scores 0.375.
 
 ## What the pack punishes, and what answers it
 
@@ -160,6 +163,34 @@ src/hac/
 Everything in the first four files runs without an API key, which is why most of the
 work could be done and measured before a single call was made.
 
+## Why the columns differ
+
+The design principle at the top of this file is that a model reads and Python computes.
+It was followed for arithmetic and broken everywhere else. Categories, dossier parsing,
+agreement detection and account identifiers were all hand-written rules, derived from
+twelve borrowers and validated on those same twelve.
+
+That choice was made when the project had a five-dollar budget and no API key, and the
+aim was to do as much as possible without a call. By the time a full run cost fifty
+cents the constraint was gone, and the architecture built for it was not revisited.
+
+An explicit argument was written down for why the rules were safe: the answer key
+carried `seed: 42, version: v1`, so the hidden pack came from the same generator, and
+reading its grammar by hand looked like learning the rules rather than fitting the data.
+Same generator, different conventions. The hidden pack used a different account prefix,
+put covenants under different clause numbers, wrote the client dossier three ways
+instead of one, and named capital purchases with the verb on the other side of the noun.
+Each was found and patched inside the three-hour window, which means the ones that were
+not found are the ones that cost the score.
+
+Rerunning the open pack after every change reported a steady score throughout. That
+measurement can only detect a rule that broke. A rule with no coverage of a form absent
+from the open pack looks healthy right up to the moment it matters.
+
+The transferable lesson, stated for whoever reads this next: anything recognised from
+free-text description belongs to the model, not to a keyword list. Saving the call costs
+more than the call.
+
 ## Limits
 
 - Two cells of the open pack are not solved. One covenant tests group capital expenditure
@@ -169,8 +200,9 @@ work could be done and measured before a single call was made.
   changes the verdict. Where neither applies, the field is left empty rather than guessed.
 - Not an audit, and not legal, financial or accounting advice. Output is for review by a
   person who can check it against the source documents.
-- Accuracy is measured on one published pack of twelve borrowers. That is the only
-  evidence there is, and it does not predict the same result on a pack nobody has read.
+- Accuracy on the published pack of twelve borrowers did not predict accuracy on the
+  hidden pack of twenty-seven. It fell from 0.9389 to 0.6139. The rule-based layer is
+  where that went, and it has not been rewritten since.
 
 ## Tests
 
