@@ -105,6 +105,40 @@ def cmd_check(cfg: Config, args) -> int:
     return 0 if not problems else 1
 
 
+def cmd_demo(cfg: Config, args) -> int:
+    """Run the deterministic core on one synthetic covenant without API access."""
+    from .bank import Txn
+    from .spec import Context, decisive_txn, evaluate_spec
+
+    txns = [
+        Txn(
+            "TXN-DEMO-1",
+            "2026-01-15",
+            "DEMO-1001",
+            "Synthetic Equipment Vendor",
+            "Purchase of production equipment",
+            -1_250_000.0,
+            "USD",
+        )
+    ]
+    spec = {
+        "numerator": [{"cat": "capex"}],
+        "direction": "max",
+        "threshold": 1_000_000.0,
+    }
+    result = evaluate_spec(spec, Context(txns=txns))
+    payload = {
+        "fixture": "synthetic; not customer or competition data",
+        "status": result.status,
+        "actual": result.actual,
+        "threshold": spec["threshold"],
+        "evidence_txn_id": decisive_txn(spec, Context(txns=txns), result),
+        "model_called": False,
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     _load_env()
     p = argparse.ArgumentParser(
@@ -136,6 +170,9 @@ def main(argv: list[str] | None = None) -> int:
     ck.add_argument("--submission", required=True)
     ck.add_argument("--template", required=True)
     ck.set_defaults(func=cmd_check)
+
+    dm = sub.add_parser("demo", help="run one synthetic deterministic covenant check")
+    dm.set_defaults(func=cmd_demo)
 
     args = p.parse_args(argv)
     cfg = Config.load(args.config)

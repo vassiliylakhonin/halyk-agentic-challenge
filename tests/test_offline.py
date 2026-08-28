@@ -13,6 +13,7 @@ from hac.kyc import KycProfile, Owner, normalize_entity, parse_kyc
 from hac.score import score_cell
 from hac.spec import Context, category_total, evaluate_spec, related_total
 from hac.vote import cell_consensus, consensus, spec_consensus
+from hac.providers import _pick
 
 
 # ----------------------------------------------------------------- ledger
@@ -197,3 +198,19 @@ def test_recovered_pages_restore_the_derived_fields():
     refresh_from_text(doc)
     assert doc.accounts == ["ACC-7806"]
     assert doc.has_covenants is True
+
+
+def test_model_discovery_prefers_exact_name_then_newest_snapshot():
+    assert _pick(["gpt-5.1-2026-01-01", "gpt-5.1", "gpt-5.1-2026-08-01"], ("gpt-5.1",)) == "gpt-5.1"
+    assert _pick(["gpt-5.1-2026-01-01", "gpt-5.1-2026-08-01"], ("gpt-5.1",)) == "gpt-5.1-2026-08-01"
+
+
+def test_synthetic_cli_demo_runs_without_a_model(capsys):
+    from hac.cli import main
+
+    assert main(["demo"]) == 0
+    output = capsys.readouterr().out
+    assert '"fixture": "synthetic; not customer or competition data"' in output
+    assert '"status": "BREACH"' in output
+    assert '"evidence_txn_id": "TXN-DEMO-1"' in output
+    assert '"model_called": false' in output

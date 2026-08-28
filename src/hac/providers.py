@@ -50,7 +50,11 @@ class Usage:
 
 def _pick(available: list[str], preference: tuple[str, ...]) -> str | None:
     for want in preference:
-        matches = sorted(m for m in available if m.startswith(want))
+        if want in available:
+            return want
+        # Snapshot identifiers normally end in an ISO-style date. Reverse
+        # lexical order selects the newest dated snapshot instead of the oldest.
+        matches = sorted((m for m in available if m.startswith(want)), reverse=True)
         if matches:
             return matches[0]
     return None
