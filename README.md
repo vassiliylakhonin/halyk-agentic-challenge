@@ -124,6 +124,16 @@ And where a key exists, scoring with the organiser's own formula:
 hac score --submission submission.json --key path/to/ground_truth.json --cells
 ```
 
+To exercise the deterministic core without a document pack, API key, or private
+competition data:
+
+```bash
+hac demo
+```
+
+The command evaluates one explicitly synthetic capex covenant and prints the
+computed status, amount, threshold, and decisive transaction identifier.
+
 ## Behaviour under a deadline
 
 The run is written for a fixed window with no second attempt.
@@ -214,11 +224,12 @@ pip install -e . pytest
 pytest tests -q
 ```
 
-Sixteen tests, no API key required: expression evaluation and its refusal to execute code,
+Eighteen tests, no API key required: expression evaluation and its refusal to execute code,
 the arithmetic mismatch path, entity-name normalisation, dossier thresholds, the
 related-party exclusion, auditor adjustments and the materiality floor, consensus across
 readings, the scoring formula, and the field rebuild after a page is recovered from an
-image.
+image. CI also reports line coverage without treating a percentage alone as evidence of
+correctness.
 
 ## License
 
