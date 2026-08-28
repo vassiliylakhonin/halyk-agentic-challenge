@@ -207,6 +207,10 @@ more than the call.
 ## Tests
 
 ```bash
+pip install -e . pytest
+```
+
+```bash
 pytest tests -q
 ```
 
@@ -215,3 +219,7 @@ the arithmetic mismatch path, entity-name normalisation, dossier thresholds, the
 related-party exclusion, auditor adjustments and the materiality floor, consensus across
 readings, the scoring formula, and the field rebuild after a page is recovered from an
 image.
+
+## License
+
+[MIT](LICENSE)
