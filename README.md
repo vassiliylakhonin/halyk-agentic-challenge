@@ -1,5 +1,8 @@
 # Covenant compliance from a document pack
 
+**A competition entry for checking loan covenants from banking documents and a transaction ledger.** It asks a model to read clauses and pages, then uses Python to compute the figures and verdicts. On the hidden pack it scored **0.6139 (83rd of 160)**, versus 0.9389 on the open pack: the gap is the result, not evidence of production accuracy. [See the results and failure analysis](#results-and-the-gap-between-them) · [Run locally](#running-it). Not a bank-ready compliance service.
+
+
 Reads a pack of banking documents and a transaction ledger, and decides for every
 financial covenant of every borrower whether it is met, what the constrained figure
 actually is, and which transaction settles the matter.
