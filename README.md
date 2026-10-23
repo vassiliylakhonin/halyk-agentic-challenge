@@ -1,8 +1,18 @@
 # Halyk Agentic Challenge
 
-A competition entry for testing loan covenants from banking documents and a transaction ledger. Models extract metric definitions and document adjustments; Python calculates amounts, ratios, and covenant statuses.
+A reproducible competition implementation for extracting loan-covenant specifications from banking documents and calculating financial ratios from a transaction ledger. Models extract definitions and adjustments; Python computes amounts, ratios, and covenant statuses.
 
 **Result:** 0.6139 on the hidden pack, placing 83rd of 160. The open-pack score was 0.9389. The gap exposes the limits of the document-parsing rules; these results do not establish production accuracy.
+
+## Choose a starting point
+
+| Your task | Start here |
+| --- | --- |
+| Run a synthetic covenant without a model key | [Quick start](#quick-start) and `hac demo` |
+| Inspect the reusable calculation layer | [Metric and ledger code](src/hac/) |
+| Understand the open-to-hidden performance gap | [Results and design notes](docs/results-and-design.md) |
+| Run a document pack you are authorised to process | [Solve and check commands](#quick-start) |
+
 
 ## How it works
 
