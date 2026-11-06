@@ -1,8 +1,62 @@
 # Halyk Agentic Challenge
 
-A reproducible competition implementation for extracting loan-covenant specifications from banking documents and calculating financial ratios from a transaction ledger. Models extract definitions and adjustments; Python computes amounts, ratios, and covenant statuses.
+**Extract covenant definitions with models. Compute amounts and ratios in Python.**
+
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+A reproducible banking-document competition implementation with an inspectable calculation layer. Models read clause definitions and adjustments; Python evaluates the metric specification against a transaction ledger.
+
+[Run the offline demo](#quick-start) · [Pipeline](#how-it-works) · [Results and limitations](#results-and-limitations) · [Design notes](docs/results-and-design.md)
 
 **Result:** 0.6139 on the hidden pack, placing 83rd of 160. The open-pack score was 0.9389. The gap exposes the limits of the document-parsing rules; these results do not establish production accuracy.
+
+## Quick start
+
+Python 3.11 or later, from a checkout:
+
+```bash
+git clone https://github.com/vassiliylakhonin/halyk-agentic-challenge.git
+cd halyk-agentic-challenge
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/hac demo
+```
+
+`hac demo` runs one explicitly synthetic capex covenant without an API key or private competition data.
+
+Expected output:
+
+```json
+{
+  "fixture": "synthetic; not customer or competition data",
+  "status": "BREACH",
+  "actual": 1250000.0,
+  "threshold": 1000000.0,
+  "evidence_txn_id": "TXN-DEMO-1",
+  "model_called": false
+}
+```
+
+The synthetic capex amount exceeds the configured limit. This exercises the calculation layer; it does not test document extraction.
+
+### Process an authorised document pack
+
+For a real document pack, configure the provider key using [.env.example](.env.example), then run:
+
+```bash
+.venv/bin/hac solve \
+  --docs-dir path/to/documents \
+  --ledger path/to/ledger.csv \
+  --template path/to/submission_template.json \
+  --out submission.json \
+  --samples 3
+.venv/bin/hac check --submission submission.json --template path/to/submission_template.json
+```
+
+`--provider` selects OpenAI or Anthropic. A solve run sends document content to the configured model provider; use only material you are authorised to process there. Competition documents and answer keys are not bundled.
+
+When an answer key is available, `hac score --submission submission.json --key path/to/ground_truth.json --cells` applies the organiser's scoring formula.
 
 ## Choose a starting point
 
@@ -26,34 +80,6 @@ A reproducible competition implementation for extracting loan-covenant specifica
 
 Model extraction can be wrong even when the arithmetic is exact. Some document recognition and categorisation still use rules fitted to the open pack. The pipeline's deadline-oriented fallbacks can produce a populated cell without reliable evidence; a complete submission is not a verified answer.
 
-## Quick start
-
-Python 3.11 or later, from a checkout:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -e .
-.venv/bin/hac demo
-```
-
-`hac demo` runs one explicitly synthetic capex covenant without an API key or private competition data.
-
-For a real document pack, configure the provider key using [.env.example](.env.example), then run:
-
-```bash
-.venv/bin/hac solve \
-  --docs-dir path/to/documents \
-  --ledger path/to/ledger.csv \
-  --template path/to/submission_template.json \
-  --out submission.json \
-  --samples 3
-.venv/bin/hac check --submission submission.json --template path/to/submission_template.json
-```
-
-`--provider` selects OpenAI or Anthropic. A solve run sends document content to the configured model provider; use only material you are authorised to process there. Competition documents and answer keys are not bundled.
-
-When an answer key is available, `hac score --submission submission.json --key path/to/ground_truth.json --cells` applies the organiser's scoring formula.
-
 ## Results and limitations
 
 | Dataset | Borrowers | Score | Placing |
@@ -75,5 +101,11 @@ The reusable components live under [src/hac/](src/hac/): metric specifications a
 ```
 
 The tests run without an API key. They cover deterministic arithmetic, refusal to execute expressions as code, adjustments, entity matching, consensus, and scoring. Passing them does not validate model extraction on unseen documents.
+
+## Contributing
+
+[Open an issue](https://github.com/vassiliylakhonin/halyk-agentic-challenge/issues) with a synthetic reproduction, expected calculation, and actual output. Useful contributions include document-format edge cases, deterministic arithmetic tests, and clearer failure analysis. Do not upload private banking documents, provider keys, or competition answer keys.
+
+## License
 
 [MIT license](LICENSE).
