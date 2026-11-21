@@ -1,15 +1,29 @@
 # Halyk Agentic Challenge
 
-**Extract covenant definitions with models. Compute amounts and ratios in Python.**
+**Read the covenants. Compute the ratios. Show the limits.**
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A reproducible banking-document competition implementation with an inspectable calculation layer. Models read clause definitions and adjustments; Python evaluates the metric specification against a transaction ledger.
+A banking-document competition implementation that turns loan covenants and a transaction ledger into calculated compliance answers. Models extract clause definitions and adjustments; Python computes amounts and ratios.
 
-[Run the offline demo](#quick-start) · [Pipeline](#how-it-works) · [Results and limitations](#results-and-limitations) · [Design notes](docs/results-and-design.md)
+### What goes in, what comes out
 
-**Result:** 0.6139 on the hidden pack, placing 83rd of 160. The open-pack score was 0.9389. The gap exposes the limits of the document-parsing rules; these results do not establish production accuracy.
+- **Input:** a document pack, a transaction ledger, and a submission template.
+- **Output:** `submission.json` with `COMPLIANT` / `BREACH`, a calculated amount or ratio, and an evidence transaction ID where the implementation identifies one.
+- **Review:** saved metric specifications and adjustments show what was extracted. A populated answer is not proof that the extraction was correct.
+
+### Try one calculation without a model
+
+The [offline demo](#quick-start) checks a synthetic capital-expenditure covenant: $1.25 million spent against a $1 million limit returns `BREACH`, with `TXN-DEMO-1` as evidence. No API key or competition documents are needed. This tests the calculation layer, not document extraction.
+
+### What the results show
+
+**Repository-reported competition result:** 0.6139 on the hidden pack, placing 83rd of 160, versus 0.9389 on the open pack. The [failure analysis](docs/results-and-design.md) explains how document-parsing rules fitted to the open pack missed unseen formats. These results do not establish production accuracy.
+
+This is a competition implementation, not a general solver benchmark. Outputs need human review against the source documents.
+
+[Run the demo](#quick-start) · [Pipeline](#how-it-works) · [Results and limitations](#results-and-limitations) · [Code and tests](#code-and-tests)
 
 ## Quick start
 
