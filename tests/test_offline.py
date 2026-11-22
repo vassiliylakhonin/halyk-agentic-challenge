@@ -214,3 +214,83 @@ def test_synthetic_cli_demo_runs_without_a_model(capsys):
     assert '"status": "BREACH"' in output
     assert '"evidence_txn_id": "TXN-DEMO-1"' in output
     assert '"model_called": false' in output
+
+
+# ------------------------------------------------------- schema validation
+
+from hac.categories import Category as _Cat
+from hac.extract import read_clause, read_supplement
+from hac.schema_check import SchemaError, require_valid_spec
+
+
+class _FakeChat:
+    name = "fake"
+
+    def __init__(self, reply):
+        self.reply = reply
+
+    def json(self, *, system, user, schema, images=None):
+        return self.reply
+
+
+def _clause_reply(**patch):
+    reply = {
+        "numerator": [{"cat": _Cat.CAPEX.value}],
+        "denominator": None,
+        "direction": "max",
+        "threshold": 60000000,
+        "reasoning": "synthetic test fixture",
+    }
+    reply.update(patch)
+    return reply
+
+
+def test_valid_clause_reply_passes_and_builds_a_spec():
+    spec = read_clause(_FakeChat(_clause_reply()), "synthetic clause")
+    assert spec["direction"] == "max"
+    assert spec["threshold"] == 60000000
+    assert spec["numerator"] == [{"cat": _Cat.CAPEX.value}]
+
+
+def test_missing_required_key_is_rejected_not_defaulted():
+    reply = _clause_reply()
+    del reply["reasoning"]
+    with pytest.raises(SchemaError):
+        read_clause(_FakeChat(reply), "synthetic clause")
+
+
+def test_wrong_enum_is_rejected():
+    with pytest.raises(SchemaError):
+        read_clause(_FakeChat(_clause_reply(direction="sideways")), "x")
+
+
+def test_unexpected_key_is_rejected():
+    with pytest.raises(SchemaError):
+        read_clause(_FakeChat(_clause_reply(confidence=0.9)), "x")
+
+
+def test_string_threshold_is_rejected():
+    with pytest.raises(SchemaError):
+        read_clause(_FakeChat(_clause_reply(threshold="60x")), "x")
+
+
+def test_unknown_category_in_term_is_rejected():
+    with pytest.raises(SchemaError):
+        read_clause(_FakeChat(_clause_reply(numerator=[{"cat": "vibes"}])), "x")
+
+
+def test_spec_gate_rejects_empty_numerator_and_bad_direction():
+    with pytest.raises(SchemaError):
+        require_valid_spec({"numerator": [], "direction": "max", "threshold": 1})
+    with pytest.raises(SchemaError):
+        require_valid_spec(
+            {"numerator": [{"cat": "capex"}], "direction": "maybe", "threshold": 1})
+
+
+def test_supplement_output_is_validated():
+    good = {"reclass": [{"amount": -100.0, "counterparty": "X",
+                         "to": _Cat.OPEX.value, "why": "synthetic"}]}
+    assert read_supplement(_FakeChat(good), "synthetic supplement")["reclass"]
+    bad = {"reclass": [{"amount": -100.0, "to": "vibes"}]}
+    with pytest.raises(SchemaError):
+        read_supplement(_FakeChat(bad), "synthetic supplement")

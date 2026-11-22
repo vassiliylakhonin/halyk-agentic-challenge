@@ -18,6 +18,7 @@ from typing import Any
 
 from .categories import Category
 from .providers import Chat
+from .schema_check import require_valid, require_valid_spec
 
 CATEGORIES = [c.value for c in Category]
 
@@ -199,6 +200,9 @@ def _clean(term: Any) -> dict[str, Any] | None:
 
 def read_clause(chat: Chat, clause_text: str) -> dict[str, Any]:
     raw = chat.json(system=SPEC_SYSTEM, user=clause_text, schema=SPEC_SCHEMA)
+    # The schema was a request; this makes it a guarantee. Invalid output is
+    # rejected whole, and the caller degrades to the rule-based reader.
+    require_valid(raw, SPEC_SCHEMA, "clause read")
     spec: dict[str, Any] = {
         "numerator": [t for t in (_clean(x) for x in raw.get("numerator", [])) if t],
         "direction": raw.get("direction", "max"),
@@ -211,11 +215,13 @@ def read_clause(chat: Chat, clause_text: str) -> dict[str, Any]:
     trigger = [t for t in (_clean(x) for x in (raw.get("springing_terms") or [])) if t]
     if trigger and raw.get("springing_above") is not None:
         spec["springing"] = {"terms": trigger, "above": raw["springing_above"]}
+    require_valid_spec(spec)
     return spec
 
 
 def read_supplement(chat: Chat, supplement_text: str) -> dict[str, Any]:
     raw = chat.json(system=ADJ_SYSTEM, user=supplement_text, schema=ADJ_SCHEMA)
+    require_valid(raw, ADJ_SCHEMA, "supplement read")
     block = {k: raw.get(k) or [] for k in
              ("reclass", "exclude", "amount_fix", "off_ledger", "fx")}
     if raw.get("addbacks") and raw["addbacks"].get("items"):
@@ -227,4 +233,5 @@ def read_supplement(chat: Chat, supplement_text: str) -> dict[str, Any]:
 def read_page(chat: Chat, image: bytes, media_type: str = "image/png") -> str:
     raw = chat.json(system=OCR_SYSTEM, user="Transcribe this page.",
                     schema=OCR_SCHEMA, images=[(media_type, image)])
+    require_valid(raw, OCR_SCHEMA, "page transcription")
     return raw.get("text", "")

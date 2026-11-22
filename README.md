@@ -87,7 +87,7 @@ When an answer key is available, `hac score --submission submission.json --key p
 | Stage | Responsibility |
 |---|---|
 | Read documents | Select agreement editions, link borrower records, and recover scanned text |
-| Extract specifications | Ask a model for structured clause definitions and ledger adjustments |
+| Extract specifications | Ask a model for structured clause definitions and ledger adjustments, then validate the reply against the declared schema locally before anything is computed from it |
 | Compute | Evaluate the metric specification against the ledger in Python |
 | Reconcile | Compare repeated readings and record agreement and extracted specifications |
 | Export | Write the competition submission and check its structure against a template |
@@ -114,7 +114,9 @@ The reusable components live under [src/hac/](src/hac/): metric specifications a
 .venv/bin/python -m pytest tests -q
 ```
 
-The tests run without an API key. They cover deterministic arithmetic, refusal to execute expressions as code, adjustments, entity matching, consensus, and scoring. Passing them does not validate model extraction on unseen documents.
+The tests run without an API key. They cover deterministic arithmetic, refusal to execute expressions as code, adjustments, entity matching, consensus, scoring, and rejection of model output that violates its declared schema. Passing them does not validate model extraction on unseen documents.
+
+Model replies carry a schema when requested, but a schema is a request, not a guarantee. `src/hac/schema_check.py` validates every reply against that schema locally and rejects it whole on a mismatch - the clause then falls back to the rule-based reader rather than a silently defaulted field. The template-plus-validation shape follows arXiv:2510.23990; that paper covers ISDA CSA derivatives contracts, not loan covenants, so the principle transfers and its numbers do not.
 
 ## Contributing
 
